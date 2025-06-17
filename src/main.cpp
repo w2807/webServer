@@ -3,15 +3,16 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include <array>
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
+#include "server.h"
 #include "thread_pool.h"
 
 namespace {
@@ -82,7 +83,7 @@ void handle_new_client(int listen_fd, int epfd) {
             accept(listen_fd, reinterpret_cast<sockaddr*>(&client_address),
                    &client_length);
         if (kClientFd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN) {
                 break;
             }
             std::cerr << "Failed to accept: " << strerror(errno) << '\n';
@@ -107,54 +108,41 @@ void handle_new_client(int listen_fd, int epfd) {
     }
 }
 
-void handle_IO(int event_fd, threadpool::ThreadPool& pool) {
-    constexpr int kBufferSize = 4096;
-
-    pool.enqueue([event_fd] mutable {
-        std::array<char, kBufferSize> buffer{};
-
-        while (true) {
-            const ssize_t kBytesReceive =
-                read(event_fd, buffer.data(), kBufferSize);
-            if (kBytesReceive < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;
-                }
-                std::cerr << "Failed to read: " << strerror(errno) << '\n';
-                close(event_fd);
-                return;
-            }
-            if (kBytesReceive == 0) {
-                close(event_fd);
-                return;
-            }
-        }
-
-        const std::string kResponse =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 13\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "Hello, World!";
-
-        const ssize_t kBytesSent =
-            write(event_fd, kResponse.c_str(), kResponse.size());
-        if (kBytesSent < 0) {
-            std::cerr << "Failed to write: " << strerror(errno) << '\n';
-        } else {
-            std::cout << "Response sent to client." << '\n';
-        }
-        close(event_fd);
-    });
+void handle_IO(int event_fd, threadpool::ThreadPool& pool,
+               httpserver::Server& server) {
+    pool.enqueue([event_fd, &server] { server.handle_connection(event_fd); });
 }
 
 }  // namespace
 
 auto main() -> int {
-    const int kPort = 8000;
+    constexpr int kPort = 8000;
+    constexpr int kConnectionOk = 200;
 
     threadpool::ThreadPool pool;
+    httpserver::Server server;
+
+    server.add_route("/", [](auto&&, auto&& response) {
+        response.status_code = kConnectionOk;
+        response.content_type = "text/plain";
+        response.body = "Hello, World!";
+    });
+    server.add_route("/hello", [](auto&&, auto&& response) {
+        response.status_code = kConnectionOk;
+        response.content_type = "text/plain";
+        response.body = "Hello from /hello!";
+    });
+    server.add_route("/goodbye", [](auto&&, auto&& response) {
+        response.status_code = kConnectionOk;
+        response.content_type = "text/plain";
+        response.body = "Goodbye!";
+    });
+    server.add_route("/error", [](auto&&, auto&& response) {
+        throw std::runtime_error("error");
+        response.status_code = kConnectionOk;
+        response.content_type = "text/plain";
+        response.body = "Should be an error";
+    });
 
     const int kServerFd = set_server_socket(kPort);
     if (kServerFd < 0) {
@@ -170,15 +158,20 @@ auto main() -> int {
     constexpr int kMaxEvents = 1024;
     std::array<epoll_event, kMaxEvents> events{};
 
+    constexpr int kTimeout = 10000;
+
     while (true) {
         const int kEventCount =
-            epoll_wait(kEpfd, events.data(), kMaxEvents, -1);
+            epoll_wait(kEpfd, events.data(), kMaxEvents, kTimeout);
+        if (kEventCount < 0) {
+            break;
+        }
         for (int i = 0; i < kEventCount; i++) {
             const int kEventFd = events[i].data.fd;
             if (kEventFd == kServerFd) {
                 handle_new_client(kServerFd, kEpfd);
             } else if ((events[i].events & EPOLLIN) != 0U) {
-                handle_IO(kEventFd, pool);
+                handle_IO(kEventFd, pool, server);
             }
         }
     }

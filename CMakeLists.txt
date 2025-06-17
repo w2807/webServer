@@ -23,6 +23,7 @@ set(CMAKE_CXX_CLANG_TIDY
 add_executable(simple_web_server 
     src/thread_pool.cpp    
     src/main.cpp
+    src/server.cpp
 )
 
 target_include_directories(simple_web_server PRIVATE

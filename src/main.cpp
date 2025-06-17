@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -155,23 +156,46 @@ auto main() -> int {
         return 1;
     }
 
-    constexpr int kMaxEvents = 1024;
+    constexpr int kMaxEvents = 8192;
     std::array<epoll_event, kMaxEvents> events{};
 
-    constexpr int kTimeout = 10000;
+    constexpr int kEpollTimeoutMs = 10000;
+    constexpr std::chrono::seconds kServerDownTimeout(300);
+    auto last_active = std::chrono::steady_clock::now();
 
     while (true) {
         const int kEventCount =
-            epoll_wait(kEpfd, events.data(), kMaxEvents, kTimeout);
+            epoll_wait(kEpfd, events.data(), kMaxEvents, kEpollTimeoutMs);
         if (kEventCount < 0) {
-            break;
+            if (errno == EINTR) {
+                continue;
+            }
+            std::cerr << "Failed to wait for events: " << strerror(errno)
+                      << '\n';
+            close(kEpfd);
+            close(kServerFd);
+            return 1;
         }
-        for (int i = 0; i < kEventCount; i++) {
-            const int kEventFd = events[i].data.fd;
-            if (kEventFd == kServerFd) {
-                handle_new_client(kServerFd, kEpfd);
-            } else if ((events[i].events & EPOLLIN) != 0U) {
-                handle_IO(kEventFd, pool, server);
+        if (kEventCount > 0) {
+            last_active = std::chrono::steady_clock::now();
+            for (int i = 0; i < kEventCount; i++) {
+                const int kEventFd = events[i].data.fd;
+                if (kEventFd == kServerFd) {
+                    handle_new_client(kServerFd, kEpfd);
+                } else if ((events[i].events & EPOLLIN) != 0U) {
+                    handle_IO(kEventFd, pool, server);
+                }
+            }
+        } else {
+            auto now = std::chrono::steady_clock::now();
+            auto duration = now - last_active;
+            if (duration >= kServerDownTimeout) {
+                std::cout << "Server inactive for "
+                          << std::chrono::duration_cast<std::chrono::seconds>(
+                                 duration)
+                                 .count()
+                          << " seconds, shutting down.\n";
+                break;
             }
         }
     }

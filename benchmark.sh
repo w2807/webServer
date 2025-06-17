@@ -2,7 +2,7 @@
 
 URL=${1:-http://127.0.0.1:8000/}
 TOTAL=${2:-100000}
-CONC=${3:-1000}
+CONC=${3:-2000}
 
 if ! command -v ab &>/dev/null; then
     echo "Install Apache Benchmark (ab) first."

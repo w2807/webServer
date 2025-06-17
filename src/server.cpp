@@ -86,6 +86,11 @@ void httpserver::Server::handle_connection(int client_fd) {
             close(client_fd);
             return;
         }
+        if (kBytesReceived == 0) {
+            std::cout << "Client " << client_fd << " disconnected." << '\n';
+            close(client_fd);
+            return;
+        }
         raw.append(buffer.data(), kBytesReceived);
         if (raw.find("\r\n\r\n") != std::string::npos) {
             break;

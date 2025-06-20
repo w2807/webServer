@@ -123,11 +123,6 @@ auto main() -> int {
     threadpool::ThreadPool pool;
     httpserver::Server server;
 
-    server.add_route("/", [](auto&&, auto&& response) {
-        response.status_code = kConnectionOk;
-        response.content_type = "text/plain";
-        response.body = "Hello, World!";
-    });
     server.add_route("/hello", [](auto&&, auto&& response) {
         response.status_code = kConnectionOk;
         response.content_type = "text/plain";

@@ -7,7 +7,10 @@
 #include <cerrno>
 #include <cstring>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -97,7 +100,6 @@ void httpserver::Server::handle_connection(int client_fd) {
         }
     }
 
-    constexpr int kNotFound = 404;
     Response response;
     try {
         auto request = parse_request(raw);
@@ -105,9 +107,19 @@ void httpserver::Server::handle_connection(int client_fd) {
         if (route_it != routes_.end()) {
             route_it->second(request, response);
         } else {
-            response.status_code = kNotFound;
-            response.content_type = "text/plain";
-            response.body = "404 Not Found";
+            const std::filesystem::path kFilePath = root_dir_ + request.path;
+            if (std::filesystem::exists(kFilePath) &&
+                std::filesystem::is_regular_file(kFilePath)) {
+                response.status_code = kConnectionOk;
+                response.content_type = "text/html";
+                std::ifstream file(kFilePath, std::ios::binary);
+                response.body.assign(std::istreambuf_iterator<char>(file),
+                                     std::istreambuf_iterator<char>());
+            } else {
+                response.status_code = kNotFound;
+                response.content_type = "text/plain";
+                response.body = "404 Not Found";
+            }
         }
 
         auto response_str = build_response(response);

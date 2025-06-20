@@ -4,8 +4,12 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace httpserver {
+
+constexpr int kConnectionOk = 200;
+constexpr int kNotFound = 404;
 
 struct Request {
     std::string method;
@@ -25,12 +29,14 @@ using Handler = std::function<void(const Request&, Response&)>;
 class Server {
 private:
     std::unordered_map<std::string, Handler> routes_;
+    std::string root_dir_;
 
     static auto parse_request(const std::string& request_str) -> Request;
     static auto build_response(const Response& response) -> std::string;
 
 public:
-    Server() = default;
+    explicit Server(std::string root_dir = "./assets")
+        : root_dir_(std::move(root_dir)) {};
 
     void add_route(const std::string& path, Handler handler);
     void handle_connection(int client_fd);
@@ -38,4 +44,4 @@ public:
 
 }  // namespace httpserver
 
-#endif // SERVER_H
+#endif  // SERVER_H

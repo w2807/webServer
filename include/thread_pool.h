@@ -21,7 +21,17 @@ private:
 public:
     explicit ThreadPool(size_t threads = std::thread::hardware_concurrency());
     ~ThreadPool();
-    void enqueue(std::function<void()> task);
+
+    template <class F>
+    void enqueue(F&& task) {
+        {
+            const std::unique_lock<std::mutex> lock(queue_mutex_);
+            tasks_.emplace(std::forward<F>(task));
+        }
+        condition_.notify_one();
+    }
+
+    void wait();
 };
 
 }  // namespace threadpool

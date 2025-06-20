@@ -35,10 +35,7 @@ threadpool::ThreadPool::~ThreadPool() {
     }
 }
 
-void threadpool::ThreadPool::enqueue(std::function<void()> task) {
-    {
-        const std::unique_lock<std::mutex> lock(queue_mutex_);
-        tasks_.emplace(std::move(task));
-    }
-    condition_.notify_one();
+void threadpool::ThreadPool::wait() {
+    std::unique_lock<std::mutex> lock(queue_mutex_);
+    condition_.wait(lock, [this] { return this->tasks_.empty(); });
 }

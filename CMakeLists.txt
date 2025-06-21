@@ -19,6 +19,9 @@ else()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -UDEBUG" CACHE STRING "Release flags" FORCE)
 endif()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
+
 set(CMAKE_CXX_CLANG_TIDY
     clang-tidy
     --config-file=${CMAKE_SOURCE_DIR}/.clang-tidy

@@ -98,7 +98,7 @@ void handle_new_client(int listen_fd, int epfd) {
         }
 
         epoll_event event{};
-        event.events = EPOLLIN | EPOLLET;
+        event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
         event.data.fd = kClientFd;
         if (epoll_ctl(epfd, EPOLL_CTL_ADD, kClientFd, &event) < 0) {
             std::cerr << "Failed to add client socket to epoll: "
@@ -118,24 +118,27 @@ void handle_IO(int event_fd, threadpool::ThreadPool& pool,
 
 auto main() -> int {
     constexpr int kPort = 8000;
-    constexpr int kConnectionOk = 200;
 
     threadpool::ThreadPool pool;
     httpserver::Server server;
 
+    server.add_route("/", [](auto&&, auto&& response) {
+        response.status_code = httpserver::kRedirect;
+        response.headers["location"] = "/index.html";
+    });
     server.add_route("/hello", [](auto&&, auto&& response) {
-        response.status_code = kConnectionOk;
+        response.status_code = httpserver::kConnectionOk;
         response.content_type = "text/plain";
         response.body = "Hello from /hello!";
     });
     server.add_route("/goodbye", [](auto&&, auto&& response) {
-        response.status_code = kConnectionOk;
+        response.status_code = httpserver::kConnectionOk;
         response.content_type = "text/plain";
         response.body = "Goodbye!";
     });
     server.add_route("/error", [](auto&&, auto&& response) {
         throw std::runtime_error("error");
-        response.status_code = kConnectionOk;
+        response.status_code = httpserver::kConnectionOk;
         response.content_type = "text/plain";
         response.body = "Should be an error";
     });

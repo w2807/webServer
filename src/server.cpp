@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cerrno>
+#include <cstddef>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -20,11 +21,16 @@ const std::unordered_map<int, std::string> kReasonPhrases = {
     {200, "OK"},
     {404, "Not Found"},
     {400, "Bad Request"},
+    {302, "Found"},
     {500, "Internal Server Error"},
 };
 
 auto httpserver::Server::parse_request(const std::string& request_str)
     -> Request {
+#ifdef DEBUG
+    std::cout << "request: " << request_str << '\n';
+#endif
+
     std::istringstream stream(request_str);
     Request request;
     std::string line;
@@ -51,25 +57,132 @@ auto httpserver::Server::parse_request(const std::string& request_str)
     return request;
 }
 
-auto httpserver::Server::build_response(const Response& response)
-    -> std::string {
+// auto httpserver::Server::build_response(const Response& response)
+//     -> std::string {
+//     std::ostringstream stream;
+//     stream << "HTTP/1.1 " << response.status_code << ' '
+//            << ((kReasonPhrases.contains(response.status_code))
+//                    ? kReasonPhrases.at(response.status_code)
+//                    : "UNKNOWN")
+//            << "\r\n";
+
+//     for (const auto& [key, value] : response.headers) {
+//         stream << key << ": " << value << "\r\n";
+//     }
+
+//     stream << "Content-Type: " << response.content_type << "\r\n"
+//            << "Content-Length: " << response.body.size() << "\r\n"
+//            << "Connection: close\r\n"
+//            << "\r\n"
+//            << response.body;
+
+//     return stream.str();
+// }
+
+void httpserver::Server::write_response(int client_fd,
+                                        const Response& response) {
     std::ostringstream stream;
-    stream << "HTTP/1.1 " << response.status_code << ' '
-           << ((kReasonPhrases.contains(response.status_code))
-                   ? kReasonPhrases.at(response.status_code)
-                   : "UNKNOWN")
+    stream << "HTTP/1.1 " << response.status_code << " "
+           << ((kReasonPhrases.contains(response.status_code)
+                    ? kReasonPhrases.at(response.status_code)
+                    : "UNKNOWN"))
            << "\r\n"
            << "Content-Type: " << response.content_type << "\r\n"
            << "Content-Length: " << response.body.size() << "\r\n"
-           << "Connection: close\r\n"
-           << "\r\n"
-           << response.body;
+           << "Connection: close\r\n";
+    for (const auto& [key, value] : response.headers) {
+        stream << key << ": " << value << "\r\n";
+    }
+    stream << "\r\n";
 
-    return stream.str();
+#ifdef DEBUG
+    std::cout << "response: " << stream.str() << '\n';
+#endif
+
+    const std::string kHeaderStr = stream.str();
+    const auto kHeaderSize = kHeaderStr.size();
+    size_t header_sent = 0;
+    while (header_sent < kHeaderSize) {
+        const auto kSentOnce = write(client_fd, kHeaderStr.data() + header_sent,
+                                     kHeaderSize - header_sent);
+        if (kSentOnce < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            std::cerr << "Failed to write header: " << strerror(errno) << '\n';
+            close(client_fd);
+            return;
+        }
+        header_sent += kSentOnce;
+    }
+
+    size_t body_sent = 0;
+    const auto kBodySize = response.body.size();
+
+#ifdef DEBUG
+    std::cout << "Response body size: " << kBodySize << '\n';
+#endif
+
+    while (body_sent < kBodySize) {
+        const auto kSentOnce = write(
+            client_fd, response.body.data() + body_sent, kBodySize - body_sent);
+        if (kSentOnce < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            std::cerr << "Failed to write body: " << strerror(errno) << '\n';
+            close(client_fd);
+            return;
+        }
+        body_sent += kSentOnce;
+    }
+    close(client_fd);
 }
 
 void httpserver::Server::add_route(const std::string& path, Handler handler) {
     routes_[path] = std::move(handler);
+}
+
+auto httpserver::Server::get_response(const std::string& raw) -> Response {
+    Response response;
+    auto request = parse_request(raw);
+    auto route_it = routes_.find(request.path);
+    if (route_it != routes_.end()) {
+        route_it->second(request, response);
+    } else {
+        const std::filesystem::path kFilePath = root_dir_ + request.path;
+        if (std::filesystem::exists(kFilePath) &&
+            std::filesystem::is_regular_file(kFilePath)) {
+            response.status_code = kConnectionOk;
+            const FileType kFileType = get_type(kFilePath.string());
+
+#ifdef DEBUG
+            std::cout << "file path: " << kFilePath.string() << '\n';
+#endif
+
+            if (kFileType == FileType::HTML) {
+                response.content_type = "text/html";
+            } else if (kFileType == FileType::JPG) {
+                response.content_type = "image/jpeg";
+            } else {
+                response.content_type = "text/plain";
+            }
+            std::ifstream file(kFilePath, std::ios::binary);
+            if (file) {
+                response.body.assign(std::istreambuf_iterator<char>(file),
+                                     std::istreambuf_iterator<char>());
+            } else {
+                std::cerr << "Failed to open file: " << kFilePath.string()
+                          << '\n';
+            }
+        } else {
+            response.status_code = kNotFound;
+            response.content_type = "text/plain";
+            response.body = "404 Not Found";
+        }
+    }
+
+    return response;
 }
 
 void httpserver::Server::handle_connection(int client_fd) {
@@ -102,43 +215,28 @@ void httpserver::Server::handle_connection(int client_fd) {
 
     Response response;
     try {
-        auto request = parse_request(raw);
-        auto route_it = routes_.find(request.path);
-        if (route_it != routes_.end()) {
-            route_it->second(request, response);
-        } else {
-            const std::filesystem::path kFilePath = root_dir_ + request.path;
-            if (std::filesystem::exists(kFilePath) &&
-                std::filesystem::is_regular_file(kFilePath)) {
-                response.status_code = kConnectionOk;
-                response.content_type = "text/html";
-                std::ifstream file(kFilePath, std::ios::binary);
-                response.body.assign(std::istreambuf_iterator<char>(file),
-                                     std::istreambuf_iterator<char>());
-            } else {
-                response.status_code = kNotFound;
-                response.content_type = "text/plain";
-                response.body = "404 Not Found";
-            }
-        }
-
-        auto response_str = build_response(response);
-        const ssize_t kBytesSent =
-            write(client_fd, response_str.c_str(), response_str.size());
-        if (kBytesSent < 0) {
-            std::cerr << "Failed to write: " << strerror(errno) << '\n';
-        } else {
-            std::cout << "Response sent to client." << '\n';
-        }
-        close(client_fd);
+        response = get_response(raw);
+        write_response(client_fd, response);
     } catch (const std::exception& e) {
-        constexpr int kInternalServerError = 500;
         std::cerr << "Error processing request: " << e.what() << '\n';
         response.status_code = kInternalServerError;
         response.content_type = "text/plain";
         response.body = "Internal Server Error";
-        auto response_str = build_response(response);
-        write(client_fd, response_str.c_str(), response_str.size());
-        close(client_fd);
+        write_response(client_fd, response);
     }
+}
+
+auto httpserver::get_type(const std::string& path) -> FileType {
+    const auto kPos = path.find_last_of('.');
+    if (kPos == std::string::npos) {
+        return FileType::NONE;
+    }
+    const auto kExt = path.substr(kPos + 1);
+    if (kExt == "html" || kExt == "htm") {
+        return FileType::HTML;
+    }
+    if (kExt == "jpg" || kExt == "jpeg") {
+        return FileType::JPG;
+    }
+    return FileType::NONE;
 }

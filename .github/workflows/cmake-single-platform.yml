@@ -35,4 +35,4 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: benchmark
-      run: ./${{github.workspace}}/build/simple_web_server && ./${{github.workspace}}/benchmark.sh
+      run: ${{github.workspace}}/build/simple_web_server && ${{github.workspace}}/benchmark.sh

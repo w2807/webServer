@@ -6,6 +6,7 @@
 #include <array>
 #include <cerrno>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -179,8 +180,10 @@ auto httpserver::Server::get_response(const std::string& raw) -> Response {
                 response.content_type = "text/html";
             } else if (kFileType == FileType::JPG) {
                 response.content_type = "image/jpeg";
+            } else if (kFileType == FileType::MP4) {
+                response.content_type = "video/mp4";
             } else {
-                response.content_type = "text/plain";
+                response.content_type = "application/octet-stream";
             }
             std::ifstream file(kFilePath, std::ios::binary);
             if (file) {
@@ -253,6 +256,9 @@ auto httpserver::get_type(const std::string& path) -> FileType {
     }
     if (kExt == "jpg" || kExt == "jpeg") {
         return FileType::JPG;
+    }
+    if (kExt == "mp4") {
+        return FileType::MP4;
     }
     return FileType::NONE;
 }

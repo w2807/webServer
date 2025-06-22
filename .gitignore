@@ -1,2 +1,4 @@
 build/
 .cache/
+*.mp4
+*.jpg

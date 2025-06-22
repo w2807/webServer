@@ -14,7 +14,7 @@ constexpr int kNotFound = 404;
 constexpr int kRedirect = 302;
 constexpr int kInternalServerError = 500;
 
-enum class FileType : std::uint8_t { HTML, JPG, NONE };
+enum class FileType : std::uint8_t { HTML, JPG, MP4, NONE };
 
 auto get_type(const std::string& path) -> FileType;
 

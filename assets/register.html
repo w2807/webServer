@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <style>
+        body {
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 50px auto;
+        }
+
+        .box {
+            padding: 2rem;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+
+        .button.is-primary {
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="box">
+            <h1 class="title has-text-centered">Register</h1>
+            <form action="/api/register" method="POST">
+                <div class="field">
+                    <label class="label">Username</label>
+                    <div class="control">
+                        <input class="input" type="text" name="username" required>
+                    </div>
+                </div>
+                <div class="field">
+                    <label class="label">Password</label>
+                    <div class="control">
+                        <input class="input" type="password" name="password" required>
+                    </div>
+                </div>
+                <div class="field is-grouped is-grouped-centered">
+                    <div class="control">
+                        <button type="submit" class="button is-primary">Register</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

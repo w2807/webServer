@@ -1,5 +1,6 @@
 #include <asm-generic/socket.h>
 #include <fcntl.h>
+#include <mysqlx/devapi/common.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -14,6 +15,7 @@
 #include <string>
 
 #include "server.h"
+#include "sql.h"
 #include "thread_pool.h"
 
 namespace {
@@ -130,7 +132,7 @@ void handle_IO(int event_fd, threadpool::ThreadPool& pool,
     });
 }
 
-void add_route(httpserver::Server& server) {
+void add_route(httpserver::Server& server, mysql::SQL& sql) {
     server.add_route("/", [](auto&&, auto&& response) {
         response.status_code = httpserver::kRedirect;
         response.headers["location"] = "/index.html";
@@ -150,6 +152,42 @@ void add_route(httpserver::Server& server) {
         response.status_code = httpserver::kConnectionOk;
         response.content_type = "text/plain";
         response.body = "Should be an error";
+    });
+    server.add_route("/api/register", [&](auto&& request, auto&& response) {
+        if (request.method != "POST") {
+            response.status_code = httpserver::kMethodNotAllowed;
+            response.content_type = "text/plain";
+            response.body = "Method Not Allowed";
+            return;
+        }
+        if (!request.body.empty()) {
+            const auto kUsernamePos = request.body.find("username=");
+            const auto kPasswordPos = request.body.find("password=");
+            if (kUsernamePos != std::string::npos &&
+                kPasswordPos != std::string::npos) {
+                const auto kUsername = request.body.substr(
+                    kUsernamePos + 9, kPasswordPos - kUsernamePos - 10);
+                const auto kPassword = request.body.substr(
+                    kPasswordPos + 9, request.body.size() - kPasswordPos - 9);
+
+#ifdef DEBUG
+                std::cout << "username: " << kUsername << '\n';
+                std::cout << "password: " << kPassword << '\n';
+#endif
+
+                try {
+                    sql.insert(kUsername, kPassword);
+                    response.status_code = httpserver::kConnectionOk;
+                    response.content_type = "text/plain";
+                    response.body = "User registered successfully!";
+                } catch (const mysqlx::Error& e) {
+                    std::cerr << "SQL error: " << e.what() << '\n';
+                    response.status_code = httpserver::kInternalServerError;
+                    response.content_type = "text/plain";
+                    response.body = "Internal Server Error";
+                }
+            }
+        }
     });
 }
 
@@ -184,8 +222,9 @@ auto main() -> int {
 
     threadpool::ThreadPool pool;
     httpserver::Server server;
+    mysql::SQL sql("mysqlx://wkz2807:114514@localhost:33060");
 
-    add_route(server);
+    add_route(server, sql);
 
     const int kServerFd = set_server_socket(kPort);
     if (kServerFd < 0) {

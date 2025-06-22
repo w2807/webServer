@@ -24,6 +24,7 @@ const std::unordered_map<int, std::string> kReasonPhrases = {
     {400, "Bad Request"},
     {302, "Found"},
     {500, "Internal Server Error"},
+    {405, "Method Not Allowed"},
 };
 
 auto httpserver::Server::parse_request(const std::string& request_str)
@@ -37,14 +38,20 @@ auto httpserver::Server::parse_request(const std::string& request_str)
     std::string line;
 
     std::getline(stream, line);
-    std::istringstream request_line(line);
-    request_line >> request.method >> request.path;
-
     if (!line.empty() && line.back() == '\r') {
         line.pop_back();
     }
 
-    while (std::getline(stream, line) && !line.empty()) {
+    std::istringstream request_line(line);
+    request_line >> request.method >> request.path;
+
+    while (std::getline(stream, line)) {
+        if (line.empty() || line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            break;
+        }
         const auto kPos = line.find(':');
         if (kPos != std::string::npos) {
             auto key = line.substr(0, kPos);

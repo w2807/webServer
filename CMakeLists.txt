@@ -19,9 +19,6 @@ else()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -UDEBUG" CACHE STRING "Release flags" FORCE)
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
-
 set(CMAKE_CXX_CLANG_TIDY
     clang-tidy
     --config-file=${CMAKE_SOURCE_DIR}/.clang-tidy
@@ -32,8 +29,13 @@ add_executable(simple_web_server
     src/thread_pool.cpp    
     src/main.cpp
     src/server.cpp
+    src/sql.cpp
 )
 
 target_include_directories(simple_web_server PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+find_package(mysql-concpp REQUIRED)
+
+target_link_libraries(simple_web_server PRIVATE mysql::concpp)

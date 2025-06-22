@@ -13,6 +13,7 @@ constexpr int kConnectionOk = 200;
 constexpr int kNotFound = 404;
 constexpr int kRedirect = 302;
 constexpr int kInternalServerError = 500;
+constexpr int kMethodNotAllowed = 405;
 
 enum class FileType : std::uint8_t { HTML, JPG, MP4, NONE };
 

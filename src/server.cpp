@@ -54,6 +54,23 @@ auto httpserver::Server::parse_request(const std::string& request_str)
             }
         }
     }
+
+    if (request.method == "POST") {
+        std::getline(stream, request.body);
+        if (!request.body.empty() && request.body.back() == '\r') {
+            request.body.pop_back();
+        }
+    }
+
+#ifdef DEBUG
+    std::cout << "method: " << request.method << '\n';
+    std::cout << "path: " << request.path << '\n';
+    for (const auto& [key, value] : request.headers) {
+        std::cout << "header: " << key << ": " << value << '\n';
+    }
+    std::cout << "body: " << request.body << '\n';
+#endif
+
     return request;
 }
 
@@ -79,8 +96,8 @@ auto httpserver::Server::parse_request(const std::string& request_str)
 //     return stream.str();
 // }
 
-void httpserver::Server::write_response(int client_fd,
-                                        const Response& response) {
+auto httpserver::Server::write_response(int client_fd, const Response& response)
+    -> bool {
     std::ostringstream stream;
     stream << "HTTP/1.1 " << response.status_code << " "
            << ((kReasonPhrases.contains(response.status_code)
@@ -89,7 +106,7 @@ void httpserver::Server::write_response(int client_fd,
            << "\r\n"
            << "Content-Type: " << response.content_type << "\r\n"
            << "Content-Length: " << response.body.size() << "\r\n"
-           << "Connection: close\r\n";
+           << "Connection: keep-alive" << "\r\n";
     for (const auto& [key, value] : response.headers) {
         stream << key << ": " << value << "\r\n";
     }
@@ -110,8 +127,7 @@ void httpserver::Server::write_response(int client_fd,
                 continue;
             }
             std::cerr << "Failed to write header: " << strerror(errno) << '\n';
-            close(client_fd);
-            return;
+            return false;
         }
         header_sent += kSentOnce;
     }
@@ -131,12 +147,11 @@ void httpserver::Server::write_response(int client_fd,
                 continue;
             }
             std::cerr << "Failed to write body: " << strerror(errno) << '\n';
-            close(client_fd);
-            return;
+            return false;
         }
         body_sent += kSentOnce;
     }
-    close(client_fd);
+    return true;
 }
 
 void httpserver::Server::add_route(const std::string& path, Handler handler) {
@@ -185,7 +200,7 @@ auto httpserver::Server::get_response(const std::string& raw) -> Response {
     return response;
 }
 
-void httpserver::Server::handle_connection(int client_fd) {
+auto httpserver::Server::handle_connection(int client_fd) -> bool {
     constexpr int kBufferSize = 4096;
     std::string raw;
     raw.reserve(kBufferSize);
@@ -200,23 +215,23 @@ void httpserver::Server::handle_connection(int client_fd) {
             }
             std::cerr << "Failed to read: " << strerror(errno) << '\n';
             close(client_fd);
-            return;
+            return false;
         }
         if (kBytesReceived == 0) {
             std::cout << "Client " << client_fd << " disconnected." << '\n';
             close(client_fd);
-            return;
+            return false;
         }
         raw.append(buffer.data(), kBytesReceived);
-        if (raw.find("\r\n\r\n") != std::string::npos) {
-            break;
-        }
     }
 
     Response response;
     try {
         response = get_response(raw);
-        write_response(client_fd, response);
+        if (!write_response(client_fd, response)) {
+            close(client_fd);
+            return false;
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error processing request: " << e.what() << '\n';
         response.status_code = kInternalServerError;
@@ -224,6 +239,7 @@ void httpserver::Server::handle_connection(int client_fd) {
         response.body = "Internal Server Error";
         write_response(client_fd, response);
     }
+    return true;
 }
 
 auto httpserver::get_type(const std::string& path) -> FileType {

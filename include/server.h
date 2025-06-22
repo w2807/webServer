@@ -41,14 +41,14 @@ private:
 
     static auto parse_request(const std::string& request_str) -> Request;
     auto get_response(const std::string& raw) -> Response;
-    static void write_response(int client_fd, const Response& response);
+    static auto write_response(int client_fd, const Response& response) -> bool;
 
 public:
     explicit Server(std::string root_dir = "./assets")
         : root_dir_(std::move(root_dir)) {};
 
     void add_route(const std::string& path, Handler handler);
-    void handle_connection(int client_fd);
+    auto handle_connection(int client_fd) -> bool;
 };
 
 }  // namespace httpserver

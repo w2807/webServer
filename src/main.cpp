@@ -97,6 +97,9 @@ void handle_new_client(int listen_fd, int epfd) {
             return;
         }
 
+        int opt = 1;
+        setsockopt(listen_fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+
         epoll_event event{};
         event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
         event.data.fd = kClientFd;
@@ -110,8 +113,19 @@ void handle_new_client(int listen_fd, int epfd) {
 }
 
 void handle_IO(int event_fd, threadpool::ThreadPool& pool,
-               httpserver::Server& server) {
-    pool.enqueue([event_fd, &server] { server.handle_connection(event_fd); });
+               httpserver::Server& server, int epoll_fd) {
+    pool.enqueue([event_fd, epoll_fd, &server] {
+        if (server.handle_connection(event_fd)) {
+            epoll_event event{};
+            event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+            event.data.fd = event_fd;
+            if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, event_fd, &event) < 0) {
+                std::cerr << "Failed to modify epoll event: " << strerror(errno)
+                          << '\n';
+                close(event_fd);
+            }
+        }
+    });
 }
 
 }  // namespace
@@ -181,7 +195,7 @@ auto main() -> int {
                 if (kEventFd == kServerFd) {
                     handle_new_client(kServerFd, kEpfd);
                 } else if ((events[i].events & EPOLLIN) != 0U) {
-                    handle_IO(kEventFd, pool, server);
+                    handle_IO(kEventFd, pool, server, kEpfd);
                 }
             }
         } else {

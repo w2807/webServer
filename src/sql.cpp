@@ -3,8 +3,12 @@
 #include <mysqlx/devapi/common.h>
 #include <mysqlx/devapi/result.h>
 #include <mysqlx/xdevapi.h>
+#include <openssl/sha.h>
 
+#include <array>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 mysql::SQL::SQL(const std::string& uri) : session_(uri) {
@@ -48,8 +52,18 @@ void mysql::SQL::insert(const std::string& query) {
 void mysql::SQL::insert(const std::string& username,
                         const std::string& passwd) {
     try {
+        std::string salted = passwd + kSalt;
+        std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
+        SHA256(reinterpret_cast<const unsigned char*>(salted.data()),
+               salted.size(), hash.data());
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0');
+        for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+            oss << std::setw(2) << static_cast<int>(hash[i]);
+        }
+        const std::string kHash = oss.str();
         session_.sql("INSERT INTO `users` (username, password) VALUES (?, ?)")
-            .bind(username, passwd)
+            .bind(username, kHash)
             .execute();
     } catch (const mysqlx::Error& e) {
         std::cerr << "error insert: " << e.what() << '\n';

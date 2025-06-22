@@ -7,6 +7,8 @@
 
 namespace mysql {
 
+constexpr std::string kSalt = "wkz2807";
+
 class SQL {
 public:
     explicit SQL(const std::string& uri);

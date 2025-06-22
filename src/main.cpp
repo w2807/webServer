@@ -18,6 +18,8 @@
 
 namespace {
 
+constexpr int kMaxEvents = 8192;
+
 auto set_no_block(int file_descriptor) -> int {
     const int kFlags = fcntl(file_descriptor, F_GETFL, 0);
     return fcntl(file_descriptor, F_SETFL, kFlags | O_NONBLOCK);
@@ -128,14 +130,7 @@ void handle_IO(int event_fd, threadpool::ThreadPool& pool,
     });
 }
 
-}  // namespace
-
-auto main() -> int {
-    constexpr int kPort = 8000;
-
-    threadpool::ThreadPool pool;
-    httpserver::Server server;
-
+void add_route(httpserver::Server& server) {
     server.add_route("/", [](auto&&, auto&& response) {
         response.status_code = httpserver::kRedirect;
         response.headers["location"] = "/index.html";
@@ -156,6 +151,41 @@ auto main() -> int {
         response.content_type = "text/plain";
         response.body = "Should be an error";
     });
+}
+
+auto check_timeout(int server_fd, int ep_fd,
+                   std::array<epoll_event, kMaxEvents>& events,
+                   std::chrono::steady_clock::time_point last_active,
+                   std::chrono::seconds timeout) -> bool {
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_active < timeout) {
+        return false;
+    }
+
+    std::cout << "Server inactive for "
+              << std::chrono::duration_cast<std::chrono::seconds>(now -
+                                                                  last_active)
+                     .count()
+              << " seconds, shutting down.\n";
+
+    for (auto& event : events) {
+        if (event.data.fd != server_fd) {
+            close(event.data.fd);
+        }
+    }
+    close(ep_fd);
+    return true;
+}
+
+}  // namespace
+
+auto main() -> int {
+    constexpr int kPort = 8000;
+
+    threadpool::ThreadPool pool;
+    httpserver::Server server;
+
+    add_route(server);
 
     const int kServerFd = set_server_socket(kPort);
     if (kServerFd < 0) {
@@ -168,7 +198,6 @@ auto main() -> int {
         return 1;
     }
 
-    constexpr int kMaxEvents = 8192;
     std::array<epoll_event, kMaxEvents> events{};
 
     constexpr int kEpollTimeoutMs = 10000;
@@ -198,17 +227,9 @@ auto main() -> int {
                     handle_IO(kEventFd, pool, server, kEpfd);
                 }
             }
-        } else {
-            auto now = std::chrono::steady_clock::now();
-            auto duration = now - last_active;
-            if (duration >= kServerDownTimeout) {
-                std::cout << "Server inactive for "
-                          << std::chrono::duration_cast<std::chrono::seconds>(
-                                 duration)
-                                 .count()
-                          << " seconds, shutting down.\n";
-                break;
-            }
+        } else if (check_timeout(kServerFd, kEpfd, events, last_active,
+                                 kServerDownTimeout)) {
+            break;
         }
     }
     close(kServerFd);

@@ -132,6 +132,87 @@ void handle_IO(int event_fd, threadpool::ThreadPool& pool,
     });
 }
 
+void register_handler(const httpserver::Request& request,
+                      httpserver::Response& response, mysql::SQL& sql) {
+    if (request.method != "POST") {
+        response.status_code = httpserver::kMethodNotAllowed;
+        response.content_type = "text/plain";
+        response.body = "Method Not Allowed";
+        return;
+    }
+    if (!request.body.empty()) {
+        const auto kUsernamePos = request.body.find("username=");
+        const auto kPasswordPos = request.body.find("password=");
+        if (kUsernamePos != std::string::npos &&
+            kPasswordPos != std::string::npos) {
+            const auto kUsername = request.body.substr(
+                kUsernamePos + 9, kPasswordPos - kUsernamePos - 10);
+            const auto kPassword = request.body.substr(
+                kPasswordPos + 9, request.body.size() - kPasswordPos - 9);
+
+#ifdef DEBUG
+            std::cout << "username: " << kUsername << '\n';
+            std::cout << "password: " << kPassword << '\n';
+#endif
+
+            try {
+                sql.insert(kUsername, kPassword);
+                response.status_code = httpserver::kConnectionOk;
+                response.content_type = "text/plain";
+                response.body = "User registered successfully!";
+            } catch (const mysqlx::Error& e) {
+                std::cerr << "SQL error: " << e.what() << '\n';
+                response.status_code = httpserver::kInternalServerError;
+                response.content_type = "text/plain";
+                response.body = "Internal Server Error";
+            }
+        }
+    }
+}
+
+void login_handler(const httpserver::Request& request,
+                   httpserver::Response& response, mysql::SQL& sql) {
+    if (request.method != "POST") {
+        response.status_code = httpserver::kMethodNotAllowed;
+        response.content_type = "text/plain";
+        response.body = "Method Not Allowed";
+        return;
+    }
+    if (!request.body.empty()) {
+        const auto kUsernamePos = request.body.find("username=");
+        const auto kPasswordPos = request.body.find("password=");
+        if (kUsernamePos != std::string::npos &&
+            kPasswordPos != std::string::npos) {
+            const auto kUsername = request.body.substr(
+                kUsernamePos + 9, kPasswordPos - kUsernamePos - 10);
+            const auto kPassword = request.body.substr(
+                kPasswordPos + 9, request.body.size() - kPasswordPos - 9);
+
+#ifdef DEBUG
+            std::cout << "username: " << kUsername << '\n';
+            std::cout << "password: " << kPassword << '\n';
+#endif
+            try {
+                auto result = sql.search(kUsername, kPassword);
+                if (result) {
+                    response.status_code = httpserver::kConnectionOk;
+                    response.content_type = "text/plain";
+                    response.body = "Login successful!";
+                } else {
+                    response.status_code = httpserver::kUnauthorized;
+                    response.content_type = "text/plain";
+                    response.body = "Invalid username or password.";
+                }
+            } catch (const mysqlx::Error& e) {
+                std::cerr << "SQL error: " << e.what() << '\n';
+                response.status_code = httpserver::kInternalServerError;
+                response.content_type = "text/plain";
+                response.body = "Internal Server Error";
+            }
+        }
+    }
+}
+
 void add_route(httpserver::Server& server, mysql::SQL& sql) {
     server.add_route("/", [](auto&&, auto&& response) {
         response.status_code = httpserver::kRedirect;
@@ -154,40 +235,10 @@ void add_route(httpserver::Server& server, mysql::SQL& sql) {
         response.body = "Should be an error";
     });
     server.add_route("/api/register", [&](auto&& request, auto&& response) {
-        if (request.method != "POST") {
-            response.status_code = httpserver::kMethodNotAllowed;
-            response.content_type = "text/plain";
-            response.body = "Method Not Allowed";
-            return;
-        }
-        if (!request.body.empty()) {
-            const auto kUsernamePos = request.body.find("username=");
-            const auto kPasswordPos = request.body.find("password=");
-            if (kUsernamePos != std::string::npos &&
-                kPasswordPos != std::string::npos) {
-                const auto kUsername = request.body.substr(
-                    kUsernamePos + 9, kPasswordPos - kUsernamePos - 10);
-                const auto kPassword = request.body.substr(
-                    kPasswordPos + 9, request.body.size() - kPasswordPos - 9);
-
-#ifdef DEBUG
-                std::cout << "username: " << kUsername << '\n';
-                std::cout << "password: " << kPassword << '\n';
-#endif
-
-                try {
-                    sql.insert(kUsername, kPassword);
-                    response.status_code = httpserver::kConnectionOk;
-                    response.content_type = "text/plain";
-                    response.body = "User registered successfully!";
-                } catch (const mysqlx::Error& e) {
-                    std::cerr << "SQL error: " << e.what() << '\n';
-                    response.status_code = httpserver::kInternalServerError;
-                    response.content_type = "text/plain";
-                    response.body = "Internal Server Error";
-                }
-            }
-        }
+        register_handler(request, response, sql);
+    });
+    server.add_route("/api/login", [&](auto&& request, auto&& response) {
+        login_handler(request, response, sql);
     });
 }
 

@@ -5,27 +5,105 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Server</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 100px auto;
+            background: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        input {
+            width: 100%;
+            padding: .5rem;
+            margin: .5rem 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: .75rem;
+            background: #3273dc;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .error {
+            color: #e74c3c;
+        }
+    </style>
 </head>
 
 <body>
-    <h1>Web Server</h1>
-    <p>Hello</p>
-    <p>A static source</p>
+    <div class="container" id="login-container">
+        <h1>Login First</h1>
+        <div class="error" id="login-error" class="hidden"></div>
+        <form id="login-form">
+            <label>username</label>
+            <input type="text" name="username" required>
+            <label>password</label>
+            <input type="password" name="password" required>
+            <button type="submit">Login</button>
+        </form>
+        <p>Don't have a account?</p>
+        <button type="button" onclick="window.location.href='/register.html'">Register</button>
+    </div>
 
-    <p>A picture</p>
+    <div class="container hidden" id="main-content">
+        <h1>Web Server</h1>
+        <p>Hello</p>
+        <p>A static source</p>
 
-    <img src="images/4161.jpg" alt="HK416" width="1600" height="1200">
+        <p>A picture</p>
+        <img src="images/4161.jpg" alt="HK416" width="1600" height="1200">
 
-    <p>Another 416</p>
+        <p>Another 416</p>
+        <img src="images/4162.jpg" alt="HK416" width="1600" height="900">
 
-    <img src="images/4162.jpg" alt="HK416" width="1600" height="900">
+        <p>video</p>
+        <video width="900" height="1600" controls>
+            <source src="videos/4989.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
 
-    <p>video</p>
-
-    <video width="900" height="1600" controls>
-        <source src="videos/4989.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
+    <script>
+        const form = document.getElementById('login-form');
+        const err = document.getElementById('login-error');
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            err.textContent = '';
+            const data = new URLSearchParams(new FormData(form));
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: data
+                });
+                if (res.ok) {
+                    document.getElementById('login-container').classList.add('hidden');
+                    document.getElementById('main-content').classList.remove('hidden');
+                } else {
+                    err.textContent = 'check your username or password';
+                }
+            } catch {
+                err.textContent = 'error';
+            }
+        });
+    </script>
 </body>
-
-</html>

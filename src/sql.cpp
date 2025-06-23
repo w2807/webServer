@@ -39,6 +39,32 @@ auto mysql::SQL::search(const std::string& query) -> mysqlx::RowResult {
     return {};  // never reach
 }
 
+auto mysql::SQL::search(const std::string& username, const std::string& passwd)
+    -> bool {
+    std::string salted = passwd + kSalt;
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
+    SHA256(reinterpret_cast<const unsigned char*>(salted.data()), salted.size(),
+           hash.data());
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        oss << std::setw(2) << static_cast<int>(hash[i]);
+    }
+    const std::string kHash = oss.str();
+    try {
+        mysqlx::RowResult result =
+            session_
+                .sql(
+                    "SELECT * FROM `users` WHERE username = ? AND password = ?")
+                .bind(username, kHash)
+                .execute();
+        return result.count() > 0;
+    } catch (const mysqlx::Error& e) {
+        std::cerr << "error search: " << e.what() << '\n';
+        throw;
+    }
+}
+
 void mysql::SQL::insert(const std::string& query) {
     try {
         mysqlx::SqlStatement statement = session_.sql(query);
@@ -58,7 +84,7 @@ void mysql::SQL::insert(const std::string& username,
                salted.size(), hash.data());
         std::ostringstream oss;
         oss << std::hex << std::setfill('0');
-        for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+        for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
             oss << std::setw(2) << static_cast<int>(hash[i]);
         }
         const std::string kHash = oss.str();

@@ -14,6 +14,7 @@ public:
     explicit SQL(const std::string& uri);
 
     auto search(const std::string& query) -> mysqlx::RowResult;
+    auto search(const std::string& username, const std::string& passwd) -> bool;
     void insert(const std::string& query);
     void insert(const std::string& username, const std::string& passwd);
 

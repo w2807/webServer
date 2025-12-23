@@ -41,8 +41,8 @@
 
 #### 2. 构建项目
 ```bash
-# 克隆仓库
-git clone https://github.com/w2807/webServer.git
+# 克隆仓库（如果还未克隆）
+git clone <repository-url>
 cd webServer
 
 # 构建（Release 模式）

@@ -4,7 +4,7 @@
 
 ## 📚 学习资源
 
-**新手入门？** 查看 [学习指南 (LEARNING_GUIDE.md)](LEARNING_GUIDE.md) 了解：
+**新手入门？** 查看 [学习指南](LEARNING_GUIDE.md) 了解：
 - 如何使用本项目学习 C++ Web 开发
 - C++ 网络编程和多线程编程
 - 如果您想学习 Go 语言的推荐项目和资源
